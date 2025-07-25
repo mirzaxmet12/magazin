@@ -23,6 +23,8 @@ export default function ProductDetailPage() {
   const [snackbarMsg, setSnackbarMsg] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
+  const accessToken = useSelector((s: RootState) => s.auth.accessToken);
+  
   useEffect(() => {
     axios.get(`/products/${id}`).then((res) => {
       setProduct(res.data.data.items);
@@ -30,6 +32,10 @@ export default function ProductDetailPage() {
   }, [id]);
 
   const handleAddToCart = (product: Product) => {
+    if (!accessToken) {
+      navigate('/login');
+      return;
+    }
     const existing = cart.find((i) => i.product.id === product.id);
     const newQuantity = existing ? existing.quantity + 1 : 1;
 

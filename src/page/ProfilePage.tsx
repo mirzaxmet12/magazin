@@ -14,6 +14,8 @@ const ProfilePage = () => {
   const user = useSelector((state: RootState) => state.auth.user);
   const dispatch = useDispatch();
 
+  
+ 
   const handleLogout = () => {
     dispatch(logout());
   };

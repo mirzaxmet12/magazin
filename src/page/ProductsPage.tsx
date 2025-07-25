@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, CardMedia, CircularProgress, 
-  Container, InputAdornment, Menu, MenuItem, Pagination, Snackbar, TextField, Typography } from '@mui/material'
+import {
+  Alert, Box, Button, Card, CardContent, CardMedia, CircularProgress,
+  Container, InputAdornment, Menu, MenuItem, Pagination, Snackbar, TextField, Typography
+} from '@mui/material'
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { fetchProductsStart, setCategoryId, setOffset, setSearchQuery, } from '../features/product/productSlice';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Category, Product, fetchCategories } from '../features/product/fetchProducts';
 import { addItemStart, fetchCartStart, updateItemStart } from '../features/cart/cartSlice';
 import SearchIcon from '@mui/icons-material/Search';
@@ -13,6 +15,9 @@ export default function ProductPage() {
   const dispatch = useDispatch();
   const { items, offset, limit, total, categoryId, loading, searchQuery } = useSelector((s: RootState) => s.products);
   const cart = useSelector((s: RootState) => s.cart.items)
+
+  const accessToken = useSelector((s: RootState) => s.auth.accessToken);
+  const navigate = useNavigate(); 
 
   const [search, setSearch] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -42,6 +47,10 @@ export default function ProductPage() {
   }, [dispatch, offset, searchQuery, categoryId]);
 
   const handleAddToCart = (product: Product) => {
+    if (!accessToken) {
+      navigate('/login');
+      return;
+    }
     const existing = cart.find((i) => i.product.id === product.id);
     const newQuantity = existing ? existing.quantity + 1 : 1;
 
@@ -235,7 +244,7 @@ export default function ProductPage() {
         <Alert
           severity={snackbarSeverity}
           onClose={() => setSnackbarOpen(false)}
-          sx={{ width: '100%',zIndex:5 }}>
+          sx={{ width: '100%', zIndex: 5 }}>
           {snackbarMsg}
         </Alert>
       </Snackbar>
