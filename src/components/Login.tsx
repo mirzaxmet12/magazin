@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {  useState } from 'react';
 import {
   Box,
   Button,
@@ -10,9 +10,7 @@ import {
   styled,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { loginStart } from '../features/auth/authSlice';
-import { RootState } from '../store/store';
+import { useLogin } from '../hooks/useAuth';
 
 export const StyledTextField = styled(TextField)(() => ({
   '& .MuiInputBase-input': {
@@ -28,25 +26,25 @@ export const StyledTextField = styled(TextField)(() => ({
   },
 }))
 export default function LoginPage() {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { logging, loginError, accessToken } = useSelector((s: RootState) => s.auth);
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const login = useLogin();
+  const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
+    
     e.preventDefault();
-    dispatch(loginStart({ phone, password }));
+
+    login.mutate({ phone, password }, {
+      onSuccess: () => {
+        navigate("/");
+      },
+      onError: (err: any) => {
+        console.error(err);
+      }
+    });
   };
-  console.log(accessToken);
-
-  useEffect(() => {
-    if (accessToken) {
-      navigate('/');
-    }
-  }, [accessToken, navigate]);
-
 
   return (
     <Box
@@ -57,7 +55,7 @@ export default function LoginPage() {
         mx: 'auto',
         mt: 8,
         px: 3,
-        py:6,
+        py: 6,
         boxShadow: 1,
         borderRadius: 2,
         background: 'var(--main-background-color)'
@@ -94,27 +92,27 @@ export default function LoginPage() {
         type="submit"
         variant="contained"
         fullWidth
-        disabled={logging}
+        disabled={login.isPending}
         sx={{
           mt: 2,
           background: 'var(--button-background-color)'
         }}
       >
-        {logging ? 'Войти...' : 'Войти'}
+        {login.isPending ? 'Войти...' : 'Войти'}
       </Button>
 
       <Box textAlign="center" sx={{ mt: 2 }}>
         <Typography variant="body2">
-        Нет аккаунта?{' '}
+          Нет аккаунта?{' '}
           <MuiLink component={Link} to="/signUp">
             Зарегистрироваться
           </MuiLink>
         </Typography>
       </Box>
 
-      <Snackbar open={!!loginError} autoHideDuration={6000}>
+      <Snackbar open={!!login.isError} autoHideDuration={6000}>
         <Alert severity="error" sx={{ width: '100%' }}>
-          {loginError}
+          {login.isError}
         </Alert>
       </Snackbar>
     </Box>

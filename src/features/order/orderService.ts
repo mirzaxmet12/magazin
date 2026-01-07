@@ -1,5 +1,5 @@
-import axios from "../../service/axios"
-import { CreateCardPayload, CreateCardResponse, CreateReceiptResponse, GenericSuccess } from "./orderTypes";
+import axios from "../../services/axios"
+import { CreateCardPayload, CreateCardResponse, CreateReceiptResponse, GenericSuccess } from "../../utilis/orderTypes";
 
 // Invoice
 export const createReceipt = async (order_id: number, amount: number): Promise<CreateReceiptResponse> => {
@@ -8,7 +8,7 @@ export const createReceipt = async (order_id: number, amount: number): Promise<C
 };
 // Card token
 export const createCard = async (params: CreateCardPayload): Promise<CreateCardResponse> => {
-    const res = await axios.post('/cards/create_card',  params );
+    const res = await axios.post('/cards/create_card', params);
     return res.data;
 };
 // SMS

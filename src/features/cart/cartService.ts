@@ -1,5 +1,5 @@
 import CartItem from '../../components/CartItem';
-import axios from '../../service/axios';
+import axios from '../../services/axios';
 import { Product } from '../product/fetchProducts';
 
 export interface CartItem {
@@ -33,12 +33,12 @@ export const addCartItem = async (
   productId: number,
   quantity: number
 ): Promise<CartItem> => {
-  const res = await axios.post<{ data:{cart: CartItem }}>('/cart', {
+  const res = await axios.post<{ data: { cart: CartItem } }>('/cart', {
     product: productId,
     quantity,
   });
   console.log(res.data.data.cart);
-  
+
   return res.data.data.cart;
 };
 
@@ -47,9 +47,9 @@ export const updateCartItem = async (
   id: number,
   product: number,
   quantity: number
-)=> {
+) => {
   // console.log(res);
-  console.log(id,product,quantity);
+  console.log(id, product, quantity);
   const res = await axios.put(`/cart/${id}`, { product, quantity });
   console.log(res.data.data.cart);
   const item = res.data.data.cart;

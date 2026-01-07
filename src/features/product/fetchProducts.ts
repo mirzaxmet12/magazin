@@ -1,8 +1,8 @@
-import axios from '../../service/axios';
+import axios from '../../services/axios';
 
 export interface Product {
-  amount:number;
-  category:number;
+  amount: number;
+  category: number;
   id: number;
   name: string;
   description: string;

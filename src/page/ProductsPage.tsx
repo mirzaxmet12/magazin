@@ -1,214 +1,330 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert, Box, Button, Card, CardContent, CardMedia, CircularProgress,
-  Container, InputAdornment, Menu, MenuItem, Pagination, Snackbar, TextField, Typography
-} from '@mui/material'
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../store/store';
-import { fetchProductsStart, setCategoryId, setOffset, setSearchQuery, } from '../features/product/productSlice';
-import { Link, useNavigate } from 'react-router-dom';
-import { Category, Product, fetchCategories } from '../features/product/fetchProducts';
-import { addItemStart, fetchCartStart, updateItemStart } from '../features/cart/cartSlice';
+  Container, Divider, Drawer, IconButton, InputAdornment, List, ListItemButton, ListItemText,
+  Pagination, Snackbar, TextField, Typography
+} from '@mui/material';
+import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from '@mui/icons-material/Search';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { useProducts } from '../hooks/useProducts';
+import { useCategories } from '../hooks/useCategories';
+import { useCart, useAddCartItem, useUpdateCartItem } from '../hooks/useCart';
+import { Category } from '../services/categoryService';
+
+function useDebounce<T>(value: T, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 export default function ProductPage() {
-  const dispatch = useDispatch();
-  const { items, offset, limit, total, categoryId, loading, searchQuery } = useSelector((s: RootState) => s.products);
-  const cart = useSelector((s: RootState) => s.cart.items)
+  const navigate = useNavigate();
 
-  const accessToken = useSelector((s: RootState) => s.auth.accessToken);
-  const navigate = useNavigate(); 
-
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(20);
   const [search, setSearch] = useState('');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const menuOpen = Boolean(anchorEl);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const debouncedSearch = useDebounce(search, 300);
 
+  // drawer + snackbar UI
+  const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMsg, setSnackbarMsg] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
+  // React Query hooks
+  const { data: productsData, isLoading: productsLoading, isFetching: productsFetching, refetch: refetchProducts } =
+    useProducts({ offset, limit, search: debouncedSearch, category: categoryId });
+
+  const { data: categories, isLoading: categoriesLoading } = useCategories();
+
+  const { data: cartItems } = useCart();
+
+  const addMutation = useAddCartItem();
+  const updateMutation = useUpdateCartItem();
+
+  const items = productsData?.items ?? [];
+  const total = productsData?.total_records ?? 0;
+
   const currentPage = Math.floor(offset / limit) + 1;
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      dispatch(setSearchQuery(search));
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [search, dispatch]);
+    setOffset(0);
+  }, [debouncedSearch, categoryId]);
 
-  useEffect(() => {
-    dispatch(fetchProductsStart());
-    dispatch(fetchCartStart());
-    fetchCategories()
-      .then((res) => setCategories(res))
-      .catch((err) => console.error(err));
-  }, [dispatch, offset, searchQuery, categoryId]);
+  // helper: get existing cart item by product id
+  const findExisting = (productId: number) => {
+    return (cartItems ?? []).find((i: any) => i.product?.id === productId);
+  };
 
-  const handleAddToCart = (product: Product) => {
-    if (!accessToken) {
+  const handleAddToCart = (product: any) => {
+    if (!localStorage.getItem('token')) {
       navigate('/login');
       return;
     }
-    const existing = cart.find((i) => i.product.id === product.id);
+
+    const existing = findExisting(product.id);
     const newQuantity = existing ? existing.quantity + 1 : 1;
 
-    if (newQuantity > product.amount) {
-      setSnackbarMsg(`Доступно только ${product.amount} шт.`);
+    if (newQuantity > (product.amount ?? 0)) {
+      setSnackbarMsg(`Доступно только ${product.amount ?? 0} шт.`);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
     }
+
     if (existing) {
-      dispatch(updateItemStart({ id: existing.id, product: existing.product.id, quantity: existing.quantity + 1 }));
-      setSnackbarMsg('Количество в корзине увеличено');
+      updateMutation.mutate(
+        { id: existing.id, product: existing.product.id, quantity: newQuantity },
+        {
+          onSuccess: () => {
+            setSnackbarMsg('Количество в корзине увеличено');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+          },
+          onError: (err: any) => {
+            setSnackbarMsg((err?.message) || 'Ошибка обновления корзины');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+          }
+        }
+      );
+    } else {
+      addMutation.mutate(
+        { productId: product.id, quantity: 1 },
+        {
+          onSuccess: () => {
+            setSnackbarMsg('Товар добавлен в корзину');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+          },
+          onError: (err: any) => {
+            setSnackbarMsg((err?.message) || 'Ошибка добавления в корзину');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+          }
+        }
+      );
     }
-    else {
-      dispatch(addItemStart({ product: product.id, quantity: 1 }))
-      setSnackbarMsg('Товар добавлен в корзину');
-    }
-    setSnackbarSeverity('success');
-    setSnackbarOpen(true)
   };
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, page: number) => {
-    dispatch(setOffset((page - 1) * limit));
+    setOffset((page - 1) * limit);
   };
 
   const handleCategorySelect = (id: number | null) => {
-    dispatch(setCategoryId(id));
-    dispatch(setOffset(0));
-    dispatch(fetchProductsStart());
-  };
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handleMenuClose = () => {
-    setAnchorEl(null);
+    setCategoryId(id);
+    setCategoryDrawerOpen(false);
   };
 
   return (
-
-    <Container sx={{
-      pt: 4,
-      pb: 4,
-      background: 'var(--background-color)'
-    }}>
+    <Container sx={{ pt: 4, pb: 4 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
         <Box sx={{ flex: '1', minWidth: 300 }}>
-          <Box sx={{
-            marginBottom: '30px',
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}>
+          {/* Search + Category button */}
+          <Box sx={{ mb: '30px', display: 'flex', justifyContent: 'space-between', gap: 2 }}>
             <TextField
               fullWidth
-
               variant="outlined"
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon />
+                    <SearchIcon sx={{ color: 'rgb(243 243 243)' }} />
                   </InputAdornment>
                 ),
                 style: {
                   borderRadius: '10px',
-                  width: '450px'
+                  width: '100%',
                 },
               }}
             />
+
             <Button
               variant="outlined"
-              onMouseEnter={handleMenuOpen}
-              onClick={handleMenuOpen}
-              aria-controls={menuOpen ? 'category-menu' : undefined}
-              aria-haspopup="true"
-              id="category-button"
+              onClick={() => setCategoryDrawerOpen(true)}
               sx={{
-                width: '260px',
+                width: 200,
+                borderRadius: "12px",
+                borderColor: "var(--border-color, #444)",
+                color: "var(--text-color, #fff)",
+                textTransform: "none",
+                fontWeight: 500,
               }}
             >
-              {categoryId === null ? 'Categories' : categories.find(c => c.id === categoryId)?.name}
+              {categoryId === null ? "Categories" : (categories ?? []).find(c => c.id === categoryId)?.name}
             </Button>
-            <Menu
-              id="category-menu"
-              anchorEl={anchorEl}
-              open={menuOpen}
-              onClose={handleMenuClose}
-              disableScrollLock
-              slotProps={{
-                paper: {
-                  onMouseLeave: () => setAnchorEl(null),
-                  sx: {
-                    maxHeight: 300,
-                    backgroundColor: 'var(--background-color)',
-                    color: 'var(--text-color)',
-                  },
-                },
-              }}
+          </Box>
 
-            >
-              <MenuItem selected={categoryId === null} onClick={() => handleCategorySelect(null)}>
-                All
-              </MenuItem>
-              {categories.map((cat) => (
-                <MenuItem
+          {/* Categories Drawer */}
+          <Drawer
+            anchor="right"
+            open={categoryDrawerOpen}
+            onClose={() => setCategoryDrawerOpen(false)}
+            slotProps={{
+              paper: {
+                sx: {
+                  width: 300,
+                  backgroundColor: "var(--background-color, #121212)",
+                  color: "var(--text-color, #fff)",
+                  p: 2,
+                },
+              },
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+              <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
+                Categories
+              </Typography>
+              <IconButton onClick={() => setCategoryDrawerOpen(false)} size="small">
+                <CloseIcon sx={{ color: "var(--text-color, #fff)" }} />
+              </IconButton>
+            </Box>
+            <Divider sx={{ mb: 2, borderColor: "var(--border-color, #444)" }} />
+
+            <List sx={{ p: 0 }}>
+              <ListItemButton
+                selected={categoryId === null}
+                onClick={() => handleCategorySelect(null)}
+                sx={{
+                  borderRadius: "8px",
+                  mb: 1,
+                  "&.Mui-selected": {
+                    backgroundColor: "var(--button-background-color, #1976d2)",
+                    color: "#fff",
+                  },
+                  "&:hover": { backgroundColor: "rgba(255,255,255,0.05)" },
+                }}
+              >
+                <ListItemText primary="All" />
+              </ListItemButton>
+
+              {categories?.map((cat:Category) => (
+                <ListItemButton
                   key={cat.id}
                   selected={categoryId === cat.id}
                   onClick={() => handleCategorySelect(cat.id)}
+                  sx={{
+                    borderRadius: "8px",
+                    mb: 1,
+                    "&.Mui-selected": {
+                      backgroundColor: "var(--button-background-color, #1976d2)",
+                      color: "#fff",
+                    },
+                    "&:hover": { backgroundColor: "rgba(255,255,255,0.05)" },
+                  }}
                 >
-                  {cat.name}
-                </MenuItem>
+                  <ListItemText primary={cat.name} />
+                </ListItemButton>
               ))}
-            </Menu>
-          </Box>
+            </List>
+          </Drawer>
 
-          {loading && items.length === 0 ? (
+          {/* Product Grid */}
+          {(productsLoading && items.length === 0) ? (
             <Box display="flex" justifyContent="center" sx={{ my: 4 }}>
               <CircularProgress />
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {items.map((product: Product) => (
-                <Card key={product.id} component={Link} to={`/product/${product.id}`}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 3
+              }}
+            >
+              {items.map((product: any) => (
+                <Card
+                  key={product.id}
+                  component={Link}
+                  to={`/product/${product.id}`}
                   sx={{
-                    width: 275,
-                    background: 'var(--background-color)',
-                    border: '1px solid var(--border-color)'
-                  }}>
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: 'var(--background-color, #121212)',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    border: '1px solid var(--border-color, #444)',
+                    overflow: 'hidden',
+                    textDecoration: 'none',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
+                    }
+                  }}
+                >
                   <CardMedia
                     component="img"
-                    height="180"
-                    image={product.images[0]?.image}
+                    image={product.images?.[0]?.image}
                     alt={product.name}
+                    sx={{
+                      height: 200,
+                      objectFit: 'cover',
+                      backgroundColor: '#f5f5f5'
+                    }}
                   />
-                  <CardContent sx={{
-                    alignItems: 'baseline',
-                    color: 'var(--text-color)'
-                  }}>
-                    <Typography variant="h6" sx={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 1,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      mb: 3
-                    }}>
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        color: 'var(--text-color)',
+                        fontWeight: 600,
+                        mb: 0.5,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        minHeight: '48px',
+                      }}
+                    >
                       {product.name}
                     </Typography>
-                    <Box>
-                      <Typography variant="body2" >
+                    {product.description && (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: 'var(--muted-text-color, #aaa)',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          minHeight: '36px',
+                          mb: 1
+                        }}
+                      >
+                        {product.description}
+                      </Typography>
+                    )}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 'auto' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, color: 'var(--text-color, #fff)' }}>
                         {product.price} сум
                       </Typography>
-                      <Button onClick={(e) => { e.preventDefault(), handleAddToCart(product) }} fullWidth variant="contained" size="small" sx={{
-                        mt: 1,
-                        backgroundColor: 'var(--button-background-color)'
-                      }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        sx={{
+                          backgroundColor: 'var(--button-background-color, #1976d2)',
+                          textTransform: 'none',
+                          px: 2,
+                          py: 0.5,
+                          borderRadius: '8px',
+                          fontWeight: 500,
+                          '&:hover': { backgroundColor: 'var(--button-hover-color, #1565c0)' }
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleAddToCart(product);
+                        }}
+                      >
                         В корзину
                       </Button>
                     </Box>
@@ -218,6 +334,7 @@ export default function ProductPage() {
             </Box>
           )}
 
+          {/* Pagination */}
           <Box display="flex" justifyContent="center" sx={{ mt: 4 }}>
             <Pagination
               count={totalPages}
@@ -225,26 +342,31 @@ export default function ProductPage() {
               onChange={handlePageChange}
               sx={{
                 '& .MuiPaginationItem-root': {
-                  color: 'var(--text-color)',
-                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-color, #fff)',
+                  borderColor: 'var(--border-color, #444)',
                 },
                 '& .Mui-selected': {
-                  background: 'var(--button-background-color)',
+                  background: 'var(--button-background-color, #1976d2)',
                   color: '#fff',
                 },
               }}
             />
+            {productsFetching && <CircularProgress size={20} sx={{ ml: 2 }} />}
           </Box>
         </Box>
       </Box>
+
+      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={2000}
-        onClose={() => setSnackbarOpen(false)}>
+        onClose={() => setSnackbarOpen(false)}
+      >
         <Alert
           severity={snackbarSeverity}
           onClose={() => setSnackbarOpen(false)}
-          sx={{ width: '100%', zIndex: 5 }}>
+          sx={{ width: '100%', zIndex: 5 }}
+        >
           {snackbarMsg}
         </Alert>
       </Snackbar>

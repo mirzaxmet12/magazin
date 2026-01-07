@@ -10,6 +10,7 @@ import CartPage from './page/CartPage';
 import OrderPage from './page/OrderPage';
 import MyOrdersPage from './page/MyOrdersPage';
 import ProfilePage from './page/ProfilePage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -19,12 +20,14 @@ function App() {
           <Route path='/' element={<ProductPage />} />
           <Route path='/signUp' element={<RegisterForm />} />
           <Route path='/login' element={<LoginPage />} />
-          <Route path='/cart' element={<CartPage />} />
-          <Route path='/product/:id' element={<ProductDetailPage />} />
           <Route path='/verify-otp' element={<OtpVerifyPage />} />
+          <Route path='/product/:id' element={<ProductDetailPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path='/cart' element={<CartPage />} />
           <Route path='/payment' element={<OrderPage/>} />
           <Route path='/myorders' element={<MyOrdersPage/>} />
           <Route path='/profile' element={<ProfilePage/>} />
+        </Route>
         </Routes>
       </Layout>
     </>

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -7,62 +8,65 @@ import {
   Typography,
   Divider,
   Alert,
-} from '@mui/material';
-import { useDispatch, useSelector } from 'react-redux';
-import { useEffect, useState } from 'react';
+  CircularProgress,
+} from "@mui/material";
+import { StyledTextField } from "../components/Login"; 
+
+import { useCart } from "../hooks/useCart";
+import { useGetMe } from "../hooks/useAuth";
 import {
-  createOrderStart,
-  createCardStart,
-  requestSmsStart,
-  paymentStart,
-  prevStep,
-  paymentSuccess,
-} from '../features/order/orderSlice';
-import { CreateOrderPayload } from '../features/order/orderTypes';
-import { RootState } from '../store/store';
-import { fetchCartStart } from '../features/cart/cartSlice';
-import { getMeStart } from '../features/auth/authSlice';
-import { StyledTextField } from '../components/Login';
+  useCreateOrder,
+  useCreateCard,
+  useRequestSms,
+  useVerifyAndPay,
+} from "../hooks/useOrder";
+import { useQueryClient } from "@tanstack/react-query";
+import type { CreateOrderPayload } from "../utilis/orderTypes";
 
 export default function OrderPage() {
-  const dispatch = useDispatch();
-  const { step } = useSelector((s: RootState) => s.order);
-  const cartItems = useSelector((s: RootState) => s.cart.items);
-  const user = useSelector((s: RootState) => s.auth.user);
-  const totalAmount = cartItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const qc = useQueryClient();
 
-  // Form state
+  const { data: cartItems = [] } = useCart();
+  const { data: user, isLoading: userLoading } = useGetMe();
+
+  const createOrder = useCreateOrder();
+  const createCard = useCreateCard();
+  const requestSms = useRequestSms();
+  const verifyAndPay = useVerifyAndPay();
+
+  const [step, setStep] = useState<"order" | "card" | "sms" | "done">("order");
+
+  // form state
+  const totalAmount = useMemo(
+    () => cartItems.reduce((sum: number, i: any) => sum + i.product.price * i.quantity, 0),
+    [cartItems]
+  );
+
   const [form, setForm] = useState<CreateOrderPayload>({
     amount: 0,
     payment_type: 1,
     delivery_type: 1,
     use_cashback: false,
     receiver: {
-      first_name: '',
-      last_name: '',
-      phone: '',
+      first_name: "",
+      last_name: "",
+      phone: "",
       longitude: 0,
       latitude: 0,
-      address: '',
+      address: "",
     },
     items: [],
   });
 
-  // Card + SMS
-  const [card, setCard] = useState({ card_number: '', expire: '' });
-  const [smsCode, setSmsCode] = useState('');
+  const [card, setCard] = useState({ card_number: "", expire: "" });
+  const [smsCode, setSmsCode] = useState("");
 
-  // Snackbars
+  // snackbars / errors
   const [emptyCartOpen, setEmptyCartOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Загрузка начальных данных
-  useEffect(() => {
-    dispatch(fetchCartStart());
-    dispatch(getMeStart());
-  }, [dispatch]);
-
-  // Обновление формы при смене корзины или пользователя
+  // prefill form when user/cart available
   useEffect(() => {
     if (user && cartItems.length > 0) {
       setForm({
@@ -76,9 +80,9 @@ export default function OrderPage() {
           phone: user.phone,
           longitude: 0,
           latitude: 0,
-          address: '',
+          address: "",
         },
-        items: cartItems.map((item) => ({
+        items: cartItems.map((item: any) => ({
           product: item.product.id,
           price: item.product.price,
           quantity: item.quantity,
@@ -87,35 +91,91 @@ export default function OrderPage() {
     }
   }, [user, cartItems, totalAmount]);
 
-  // Открыть Snackbar "Оплата успешно" когда step переходит в done
-  useEffect(() => {
-    if (step === 'done') {
-      setSuccessOpen(true);
-    }
-  }, [step]);
+  // user loading state
+  if (userLoading) {
+    return (
+      <Box textAlign="center" mt={10}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-  const handleSubmit = () => {
-    if (cartItems.length === 0) {
+  // Advance step when createOrder succeeds
+  useEffect(() => {
+    if (createOrder.isSuccess) {
+      // if online payment => go to card step, else mark done
+      if (form.payment_type === 1) {
+        setStep("card");
+      } else {
+        setStep("done");
+        setSuccessOpen(true);
+        qc.invalidateQueries({ queryKey: ["cart"] });
+      }
+    }
+    if (createOrder.isError) {
+      setErrorMsg((createOrder.error as Error)?.message ?? "Ошибка создания заказа");
+    }
+  }, [createOrder.isSuccess, createOrder.isError]);
+
+  // when createCard success -> move to sms
+  useEffect(() => {
+    if (createCard.isSuccess) setStep("sms");
+    if (createCard.isError) setErrorMsg((createCard.error as Error)?.message ?? "Ошибка создания карты");
+  }, [createCard.isSuccess, createCard.isError]);
+
+  // requestSms error
+  useEffect(() => {
+    if (requestSms.isError) setErrorMsg((requestSms.error as Error)?.message ?? "Ошибка отправки SMS");
+  }, [requestSms.isError]);
+
+  // when verifyAndPay success -> done
+  useEffect(() => {
+    if (verifyAndPay.isSuccess) {
+      setStep("done");
+      setSuccessOpen(true);
+      qc.invalidateQueries({ queryKey: ["cart"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    }
+    if (verifyAndPay.isError) setErrorMsg((verifyAndPay.error as Error)?.message ?? "Ошибка оплаты");
+  }, [verifyAndPay.isSuccess, verifyAndPay.isError]);
+
+  const handleCreateOrder = () => {
+    if (!cartItems || cartItems.length === 0) {
       setEmptyCartOpen(true);
       return;
     }
     if (form.delivery_type === 2 && !form.receiver.address) {
-      alert('Адрес обязателен!');
+      setErrorMsg("Адрес обязателен для курьерской доставки");
       return;
     }
-    dispatch(createOrderStart(form));
-    if (form.payment_type === 2) {
-      dispatch(paymentSuccess());
+    createOrder.mutate(form);
+  };
+
+  const handleCreateCard = () => {
+    createCard.mutate({ card_number: card.card_number, expire: card.expire });
+  };
+
+  const handleRequestSms = () => {
+    const current = qc.getQueryData<any>(["order", "current"]);
+    const token = current?.cardToken ?? current?.card_token ?? null;
+    if (!token) {
+      setErrorMsg("Нет токена карты");
+      return;
     }
+    requestSms.mutate(token);
   };
 
-  const handleCard = () => {
-    dispatch(createCardStart(card));
-    dispatch(requestSmsStart());
-  };
+  const handleVerifyAndPay = () => {
+    const current = qc.getQueryData<any>(["order", "current"]);
+    const token = current?.cardToken ?? current?.card_token ?? null;
+    const invoiceId = current?.invoiceId ?? current?.invoice_id ?? null;
+    console.log(current);
 
-  const handlePayment = () => {
-    dispatch(paymentStart(smsCode));
+    if (!token || !invoiceId) {
+      setErrorMsg("Нет данных для оплаты");
+      return;
+    }
+    verifyAndPay.mutate({ token, code: smsCode, invoiceId });
   };
 
   return (
@@ -123,31 +183,30 @@ export default function OrderPage() {
       maxWidth="sm"
       sx={{
         maxWidth: 360,
-        mx: 'auto',
+        mx: "auto",
         mt: 8,
         px: 3,
         py: 6,
         boxShadow: 1,
         borderRadius: 2,
-        background: 'var(--main-background-color)',
+        background: "var(--main-background-color)",
       }}
     >
-      <Button variant="text" onClick={() => dispatch(prevStep())}>
+      <Button variant="text" onClick={() => setStep("order")}>
         ← Назад
       </Button>
 
-      {step === 'order' && (
+      {step === "order" && (
         <Box>
           <Typography variant="h5" gutterBottom>
             Оформление заказа
           </Typography>
 
-          {cartItems.map((item) => (
+          {cartItems.map((item: any) => (
             <Box key={item.id} sx={{ mb: 1 }}>
               <Typography>{item.product.name}</Typography>
               <Typography variant="body2">
-                {item.product.price} сум × {item.quantity} ={' '}
-                {item.product.price * item.quantity} сум
+                {item.product.price} сум × {item.quantity} = {item.product.price * item.quantity} сум
               </Typography>
               <Divider sx={{ my: 1 }} />
             </Box>
@@ -249,15 +308,15 @@ export default function OrderPage() {
             fullWidth
             variant="contained"
             sx={{ mt: 2 }}
-            onClick={handleSubmit}
-            disabled={cartItems.length === 0}
+            onClick={handleCreateOrder}
+            disabled={createOrder.isPending}
           >
-            Подтвердить заказ
+            {createOrder.isPending ? "Создание..." : "Подтвердить заказ"}
           </Button>
         </Box>
       )}
 
-      {form.payment_type === 1 && step === 'card' && (
+      {form.payment_type === 1 && step === "card" && (
         <Box sx={{ mt: 4 }}>
           <Typography variant="h6">💳 Оплата картой</Typography>
 
@@ -266,9 +325,7 @@ export default function OrderPage() {
             fullWidth
             margin="normal"
             value={card.card_number}
-            onChange={(e) =>
-              setCard({ ...card, card_number: e.target.value })
-            }
+            onChange={(e) => setCard({ ...card, card_number: e.target.value })}
           />
           <StyledTextField
             label="Срок действия (MM/YY)"
@@ -282,70 +339,51 @@ export default function OrderPage() {
             fullWidth
             variant="outlined"
             sx={{ mt: 2 }}
-            onClick={handleCard}
+            onClick={handleCreateCard}
+            disabled={createCard.isPending}
           >
-            📩 Запросить SMS код
+            {createCard.isPending ? "Отправка..." : "📩 Запросить SMS код"}
           </Button>
         </Box>
       )}
 
-      {step === 'sms' && (
+      {step === "sms" && (
         <Box sx={{ mt: 4 }}>
           <Typography variant="h6">📱 Введите SMS код</Typography>
-          <StyledTextField
-            label="SMS код"
-            fullWidth
-            margin="normal"
-            value={smsCode}
-            onChange={(e) => setSmsCode(e.target.value)}
-          />
+          <StyledTextField label="SMS код" fullWidth margin="normal" value={smsCode} onChange={(e) => setSmsCode(e.target.value)} />
 
-          <Button
-            fullWidth
-            variant="contained"
-            sx={{ mt: 2 }}
-            onClick={handlePayment}
-          >
-            💰 Оплатить
+          <Button fullWidth variant="contained" sx={{ mt: 2 }} onClick={handleVerifyAndPay} disabled={verifyAndPay.isPending}>
+            {verifyAndPay.isPending ? "Пожалуйста..." : "💰 Оплатить"}
+          </Button>
+
+          <Button fullWidth variant="text" sx={{ mt: 1 }} onClick={handleRequestSms} disabled={requestSms.isPending}>
+            {requestSms.isPending ? "Отправка..." : "Отправить SMS снова"}
           </Button>
         </Box>
       )}
 
-      {step === 'done' && (
+      {step === "done" && (
         <Typography variant="h5" color="green" sx={{ mt: 4 }}>
           ✅ Оплата прошла успешно!
         </Typography>
       )}
 
-      {/* Snackbar: корзина пуста */}
-      <Snackbar
-        open={emptyCartOpen}
-        autoHideDuration={3000}
-        onClose={() => setEmptyCartOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="warning"
-          onClose={() => setEmptyCartOpen(false)}
-          sx={{ width: '100%' }}
-        >
+      {/* Snackbars */}
+      <Snackbar open={emptyCartOpen} autoHideDuration={3000} onClose={() => setEmptyCartOpen(false)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity="warning" onClose={() => setEmptyCartOpen(false)} sx={{ width: "100%" }}>
           Корзина пуста!
         </Alert>
       </Snackbar>
 
-      {/* Snackbar: оплата успешна */}
-      <Snackbar
-        open={successOpen}
-        autoHideDuration={3000}
-        onClose={() => setSuccessOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success"
-          onClose={() => setSuccessOpen(false)}
-          sx={{ width: '100%' }}
-        >
-          Заказ прошла успешно!
+      <Snackbar open={successOpen} autoHideDuration={3000} onClose={() => setSuccessOpen(false)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity="success" onClose={() => setSuccessOpen(false)} sx={{ width: "100%" }}>
+          Заказ успешно оформлен!
+        </Alert>
+      </Snackbar>
+
+      <Snackbar open={!!errorMsg} autoHideDuration={5000} onClose={() => setErrorMsg(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity="error" onClose={() => setErrorMsg(null)} sx={{ width: "100%" }}>
+          {errorMsg}
         </Alert>
       </Snackbar>
     </Container>

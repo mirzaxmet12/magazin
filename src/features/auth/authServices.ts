@@ -1,5 +1,5 @@
 import { UserInfo } from "./authSlice";
-import axios from "../../service/axios";
+import axios from "../../services/axios";
 
 export interface RegisterPayload {
     first_name: string;
@@ -71,4 +71,4 @@ export const loginUser = async (payload: LoginPayload) => {
 export const getMe = async (): Promise<UserInfo> => {
     const res = await axios.get<{ data: { user: UserInfo } }>('/users/me');
     return res.data.data.user;
-  };
+};

@@ -2,32 +2,36 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Button, Typography, Snackbar, Alert
 } from '@mui/material';
-import { useDispatch, useSelector } from 'react-redux';
-import { verifyStart } from '../features/auth/authSlice';
-import { RootState } from '../store/store';
 import { useNavigate } from 'react-router-dom';
 import { StyledTextField } from './Login';
+import { useVerifyOtp } from '../hooks/useAuth';
 
 export default function OtpVerifyPage() {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { verifying, verifyError, accessToken } = useSelector((s: RootState) => s.auth);
   const [otp, setOtp] = useState('');
-
   const phone = localStorage.getItem('registered_phone');
+
+  const {
+    mutate,
+    isPending,
+    isError,
+    error,
+    isSuccess,
+  } = useVerifyOtp();
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (phone) {
-      dispatch(verifyStart({ phone, otp }));
-    }
+    if (!phone) return;
+
+    mutate({ phone, otp });
   };
 
   useEffect(() => {
-    if (accessToken) {
+    if (isSuccess) {
       navigate('/');
     }
-  }, [accessToken, navigate]);
+  }, [isSuccess, navigate]);
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{
@@ -45,15 +49,18 @@ export default function OtpVerifyPage() {
         onChange={(e) => setOtp(e.target.value)}
         required
       />
-      <Button type="submit" fullWidth variant="contained" disabled={verifying} sx={{
-        mt: 2,
-        background: 'var(--button-background-color)'
-      }} >
-        {verifying ? 'Verifying...' : 'Verify'}
+      <Button type="submit" fullWidth variant="contained" disabled={isPending || otp.length < 4}
+        sx={{
+          mt: 2,
+          background: 'var(--button-background-color)'
+        }} >
+        {isPending ? 'Verifying...' : 'Verify'}
       </Button>
 
-      <Snackbar open={!!verifyError} autoHideDuration={6000}>
-        <Alert severity="error" sx={{ width: '100%' }}>{verifyError}</Alert>
+      <Snackbar open={isError} autoHideDuration={6000}>
+        <Alert severity="error" sx={{ width: '100%' }}>
+          {(error as any)?.response?.data?.message || 'OTP error'}
+        </Alert>
       </Snackbar>
     </Box>
   );

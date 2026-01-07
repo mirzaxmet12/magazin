@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { CreateCardPayload, CreateOrderPayload } from "./orderTypes";
+import { CreateCardPayload, CreateOrderPayload } from "../../utilis/orderTypes";
 
 interface OrderState {
     loading: boolean;
@@ -79,7 +79,7 @@ const orderSlice = createSlice({
             state.loading = true;
             state.error = null;
             console.log('kk');
-            
+
         },
         orderCreated(state, action: PayloadAction<number>) {
             state.orderId = action.payload;
@@ -132,7 +132,7 @@ const orderSlice = createSlice({
         setOrders(state, action: PayloadAction<Order[]>) {
             state.orders = action.payload;
             console.log(state.orders);
-            
+
             state.loading = false;
         },
 
@@ -142,14 +142,14 @@ const orderSlice = createSlice({
         },
 
         prevStep(state) {
-            if (state.step === 'sms')       state.step = 'card';
+            if (state.step === 'sms') state.step = 'card';
             else if (state.step === 'card') state.step = 'order';
-            else if (state.step === 'done')  state.step =  'order';
-          }
+            else if (state.step === 'done') state.step = 'order';
+        }
     },
 });
 
-export const { createOrderStart, orderCreated, createCardStart, requestSmsStart,getOrdersStart,setOrders,
-    smsRequested, paymentStart, paymentSuccess, orderFailure, setInvoiceId, setCardToken,prevStep } = orderSlice.actions;
+export const { createOrderStart, orderCreated, createCardStart, requestSmsStart, getOrdersStart, setOrders,
+    smsRequested, paymentStart, paymentSuccess, orderFailure, setInvoiceId, setCardToken, prevStep } = orderSlice.actions;
 
 export default orderSlice.reducer;

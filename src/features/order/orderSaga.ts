@@ -2,9 +2,9 @@ import { call, put, select, take, takeLatest } from "redux-saga/effects";
 import { orderFailure, createCardStart, createOrderStart, orderCreated, setCardToken, setInvoiceId, requestSmsStart, smsRequested, paymentStart, paymentSuccess, getOrdersStart, setOrders } from "./orderSlice";
 import { createCard, createReceipt, payInvoice, requestSms, verifyCard } from "./orderService";
 import { END, EventChannel, SagaIterator, eventChannel } from "redux-saga";
-import { CreateCardResponse, CreateOrderPayload } from "./orderTypes";
+import { CreateCardResponse, CreateOrderPayload } from "../../utilis/orderTypes";
 import { RootState } from "../../store/store";
-import axios from "../../service/axios";
+import axios from "../../services/axios";
 
 // Websocket
 

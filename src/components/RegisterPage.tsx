@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Button, Typography, Snackbar, Alert } from '@mui/material';
-import { useDispatch, useSelector } from 'react-redux';
-import { registerStart } from '../features/auth/authSlice';
-import { RootState } from '../store/store';
 import { useNavigate } from 'react-router-dom';
-import { RegisterPayload } from '../features/auth/authServices';
+import { RegisterPayload } from '../services/authService';
 import { StyledTextField } from './Login';
+import { useRegister } from '../hooks/useAuth';
 
 export default function RegisterPage() {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { registering, registerError, userId } = useSelector((s: RootState) => s.auth);
+  const register = useRegister();
+  const [openError, setOpenError] = useState<string | null>(null);
+
 
   const [form, setForm] = useState<RegisterPayload>({
     first_name: '',
@@ -27,24 +26,33 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    dispatch(registerStart(form));
-    localStorage.setItem('registered_phone', form.phone);
+    register.mutate(form, {
+      onSuccess: (_data) => {
+        // store phone for OTP verification step
+        localStorage.setItem("registered_phone", form.phone);
+        navigate("/verify-otp");
+      },
+      onError: (err: any) => {
+        // show API error
+        const msg = err?.response?.data?.errorMessage ?? err?.message ?? "Ошибка регистрации";
+        setOpenError(msg);
+      },
+    });
   };
 
   useEffect(() => {
-    if (userId) {
-      navigate('/verify-otp');
+    if ((register.error as any)?.message && !openError) {
+      setOpenError((register.error as any).message);
     }
-  }, [userId, navigate]);
- 
-
+  }, [register.error]);
+  
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{
       maxWidth: 400, mx: 'auto',
       mt: 4,
-      p:'40px 30px ',
-      borderRadius:'5px',
-      background:'var(--main-background-color)'
+      p: '40px 30px ',
+      borderRadius: '5px',
+      background: 'var(--main-background-color)'
     }}>
       <Typography variant="h5" mb={2}>Create Account</Typography>
       <StyledTextField label="First Name" name="first_name" fullWidth required margin="normal" onChange={handleChange} />
@@ -57,12 +65,12 @@ export default function RegisterPage() {
         <option value="female">Female</option>
       </StyledTextField>
 
-      <Button fullWidth variant="contained" sx={{ mt: 2 }} type="submit" disabled={registering}>
-        {registering ? 'Signing up…' : 'Sign Up'}
+      <Button fullWidth variant="contained" sx={{ mt: 2 }} type="submit" disabled={register.isPending}>
+        {register.isPending ? 'Signing up…' : 'Sign Up'}
       </Button>
 
-      <Snackbar open={!!registerError} autoHideDuration={6000}>
-        <Alert severity="error" sx={{ width: '100%' }}>{registerError}</Alert>
+      <Snackbar open={!!openError} autoHideDuration={6000}>
+        <Alert severity="error" sx={{ width: '100%' }}>{openError}</Alert>
       </Snackbar>
     </Box>
   );
