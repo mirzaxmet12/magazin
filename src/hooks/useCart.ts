@@ -6,7 +6,7 @@ import {
   removeCartItem,
   clearCart,
   CartItem,
-} from "../features/cart/cartService";
+} from "../services/cartService";
 
 type AddPayload = { productId: number; quantity?: number };
 type UpdatePayload = { id: number; product: number; quantity: number };
@@ -22,7 +22,7 @@ export function useCart() {
   });
 }
 
-/** Add item  */
+/** Add item */
 export function useAddCartItem() {
   const qc = useQueryClient();
 
@@ -65,7 +65,7 @@ export function useUpdateCartItem() {
   });
 }
 
-/** Remove item — optimistic remove with rollback */
+/** Remove item */
 export function useRemoveCartItem() {
   const qc = useQueryClient();
 

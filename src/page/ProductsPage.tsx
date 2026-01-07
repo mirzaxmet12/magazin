@@ -38,10 +38,10 @@ export default function ProductPage() {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   // React Query hooks
-  const { data: productsData, isLoading: productsLoading, isFetching: productsFetching, refetch: refetchProducts } =
+  const { data: productsData, isLoading: productsLoading, isFetching: productsFetching } =
     useProducts({ offset, limit, search: debouncedSearch, category: categoryId });
 
-  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: categories } = useCategories();
 
   const { data: cartItems } = useCart();
 

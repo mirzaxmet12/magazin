@@ -27,10 +27,10 @@ export function useCreateOrder() {
     const qc = useQueryClient();
 
     return useMutation<CreateOrderResult, Error, CreateOrderPayload>({
-        
+
         mutationFn: (payload: CreateOrderPayload) => createOrderViaWs(payload),
 
-        onMutate: async (payload) => {
+        onMutate: async () => {
             await qc.cancelQueries({ queryKey: ORDERS_KEY });
             // optionally set optimistic placeholder
             const previous = qc.getQueryData(ORDERS_KEY);

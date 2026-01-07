@@ -30,10 +30,10 @@ export default function ProductDetailPage() {
   const addMutation = useAddCartItem();
   const updateMutation = useUpdateCartItem();
 
-  const { data: product, isLoading: productLoading, isError: productError } = useProduct(
+  const { data: product, isLoading: productLoading } = useProduct(
     id ? Number(id) : undefined
   );
-  const { data: products, isLoading: productsLoading, isError: productsError } = useProducts({ category: product?.category });
+  const { data: products, isLoading: productsLoading, } = useProducts({ category: product?.category });
   console.log(product);
   const { data: category } = useCategory(product?.category)
 

@@ -13,9 +13,8 @@ function Auth() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: user, isLoading: userLoading } = useGetMe();
+  const { data: user } = useGetMe();
 
-  // cart items for badge count
   const { data: cartItems = [] } = useCart();
   const cartCount = Array.isArray(cartItems) ? cartItems.length : 0;
 

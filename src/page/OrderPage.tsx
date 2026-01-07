@@ -10,7 +10,7 @@ import {
   Alert,
   CircularProgress,
 } from "@mui/material";
-import { StyledTextField } from "../components/Login"; 
+import { StyledTextField } from "../components/Login";
 
 import { useCart } from "../hooks/useCart";
 import { useGetMe } from "../hooks/useAuth";
